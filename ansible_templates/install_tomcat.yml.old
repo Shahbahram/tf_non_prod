@@ -1,0 +1,30 @@
+---
+- hosts: "{{ passed_in_hosts }}"
+  become: yes
+  remote_user: ec2-user
+  become_user: = root
+  tasks:
+   - name: Install git client
+     yum
+     name: git
+     state: present
+
+  - name: Create a new ext4 primary partition
+    community.general.parted:
+      device: /dev/sdb
+      number: 1
+      state: present
+      fs_type: xfs
+
+  - name: Create /apps01 mount point
+    ansible.builtin.file:
+      path: /apps01
+      state: directory
+      mode: '0755'
+
+  - name: Mount /apps01 file system
+    ansible.posix.mount:
+      path: /apps01
+      src: /dev/sdb1
+      fstype: xfs
+      state: present
