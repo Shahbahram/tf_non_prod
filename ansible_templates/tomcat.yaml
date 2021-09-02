@@ -7,4 +7,11 @@
     - name: install git
       yum:
         name: git
-        state: present
+        state: absent
+    - name: Install epel Repo
+      yum:
+         name: epel-release
+         state: present
+         update_cache: true 
+      become: true
+         	
