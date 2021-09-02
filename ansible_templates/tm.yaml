@@ -8,6 +8,10 @@
       - java_instl_file: "/apps01/repo/OpenJDK11U-jdk_x64_linux_hotspot_11.0.12_7.tar.gz"
       - software_repo: "/apps01/repo"
       - default_user_password: Zereshk1
+      - app_user: "svc_wdtvs"
+      - linux_hostname: "wdtvsux01.wdtvs.com"
+      - defaul_user: "ec2-user"
+
   remote_user: ec2-user
   tasks:
    - name: Set timezone to PST
@@ -20,7 +24,7 @@
         gid: 1200
         state: present
 
-   - name: Add Shah Mehraein account 
+   - name: Create Shah Mehraein's account
      user:
         name: smehraein
         comment: Shah Mehraein
@@ -31,9 +35,9 @@
         state: present
         generate_ssh_key: yes
 
-   - name: Add wxtvs user
+   - name: Create the applicaiton account
      user:
-        name: wdtvsit
+        name: "{{ app_user }}
         comment:  Walt Disney Television IT
         uid: 1400
         password: "{{ default_user_password | password_hash('sha512', 'A512') }}"
@@ -42,31 +46,27 @@
         generate_ssh_key: yes
 
    - name: Set the hostname 
-     command: hostnamectl set-hostname tvatwdux01.wdtvs.com
+     command: hostnamectl set-hostname "{{ linux_hostname }}"
      become: yes
 
-   - name: install wget
+   - name: Install wget, zip & unzip
      become: yes
      dnf:
-        name: wget
+        name: wget, zip, unzip
         state: latest
-
-   - name: Install zip and unzip 
-     become: yes
-     yum:
-       name: zip, unzip
-       state: present 
 
    - name: Create Partition
      parted:
         device: /dev/nvme1n1
         number: 1
         state: present
+
    - name: Create file system
      filesystem:
         dev: /dev/nvme1n1p1
         fstype: xfs
         state: present
+
    - name: Mount /apps01
      mount:
         path: /apps01
@@ -80,8 +80,8 @@
        path: "{{ software_repo}}"
        state: directory
        mode: 0755
-       owner: ec2-user
-       group: ec2-user
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
 
    - name: Create tomcat home directory
      become: yes
@@ -89,8 +89,8 @@
        path: "{{ tomcat_home }}"
        state: directory
        mode: 0755
-       owner: wdtvsit
-       group: wdtvsit
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
       
    - name: Create Java home directory
      become: yes
@@ -98,8 +98,8 @@
        path: "{{ java_home }}"
        state: directory
        mode: 0755
-       owner: wdtvsit
-       group: wdtvsit
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
 
    - name: Download Tomcat using get_url
      become: yes
@@ -108,8 +108,8 @@
        dest: "{{ software_repo }}"
        mode: 0755
        checksum: sha512:cbd1b6b9b650b9555ca64c64dc9f06745b3995179c717fd07a93aece1f42c76f337cf5563b625dc9039f6f27721aeb7d396ab2162ff0656f0448a6d2dfb83f2c
-       group: wdtvsit 
-       owner: wdtvsit
+       group: "{{app_user}}"
+       owner: "{{app_user}}"
 
    - name: Download Java
      become: yes
@@ -118,16 +118,16 @@
        dest: "{{ software_repo }}"
        mode: 0755
        checksum: sha256:8770f600fc3b89bf331213c7aa21f8eedd9ca5d96036d1cd48cb2748a3dbefd2
-       group: wdtvsit 
-       owner: wdtvsit
+       group: "{{app_user}}"
+       owner: "{{app_user}}"
 
 
    - name : Copy and Install Tomcat
      become: yes
      tags: tomcatinstall
      unarchive:
-      owner: wdtvsit
-      group: wdtvsit
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
       remote_src: yes
       src: "{{ tomcat_instl_file }}"
       dest: "{{ tomcat_home }}"
@@ -136,8 +136,8 @@
      become: yes
      tags: javainstall
      unarchive:
-      owner: wdtvsit
-      group: wdtvsit
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
       remote_src: yes
       src: "{{ java_instl_file }}"
       dest: "{{ java_home }}"
@@ -155,8 +155,8 @@
        path: /apps01/wdtvs/apache/tomcat/wdtvs/television-production/bin/setenv.sh
        state: touch
        mode: u+rw,g-w,o-rwx
-       owner: wdtvsit
-       group: wdtvsit
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
 
    - name: Add content to setenv.sh file
      lineinfile:
