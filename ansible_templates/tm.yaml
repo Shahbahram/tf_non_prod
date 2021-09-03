@@ -1,28 +1,34 @@
 ---
 - name: Configure and customize App server
   hosts: all
+  gather_facts: no
   vars:
       - tomcat_home: "/apps01/wdtvs/apache/tomcat/wdtvs"
       - tomcat_instl_file: "/apps01/repo/apache-tomcat-9.0.52.zip"
       - java_home: "/apps01/wdtvs/jdk"
       - java_instl_file: "/apps01/repo/OpenJDK11U-jdk_x64_linux_hotspot_11.0.12_7.tar.gz"
+      - jar_file_src: "/home/shahm/non-prod-wdtvs/ansible_templates/config_files/jar_files/jars.zip"
+      - jar_file_target: "/apps01/wdtvs/apache/tomcat/wdtvs/television-production/lib/"
+      - jar_instl_file: "/apps01/repo/jars.zip"
       - software_repo: "/apps01/repo"
       - default_user_password: Zereshk1
       - app_user: "svc_wdtvs"
       - linux_hostname: "wdtvsux01.wdtvs.com"
+      - defaul_user: "ec2-user"
+
   remote_user: ec2-user
   tasks:
    - name: Set timezone to PST
-     command: timedatectl set-timezone America/Los_Angeles
-     become: yes
-     
-   - name: Ensure group "admin" exists with correct gid
+     timezone:
+        name: America/Los_Angeles
+   
+   - name: Ensure group admin exists with correct gid
      group:
         name: uxadmin
         gid: 1200
         state: present
 
-   - name: Create Shah Mehraein's account
+   - name: Create Shah Mehraein account
      user:
         name: smehraein
         comment: Shah Mehraein
@@ -35,7 +41,7 @@
 
    - name: Create the applicaiton account
      user:
-        name: "{{ app_user }}
+        name: "{{ app_user }}"
         comment:  Walt Disney Television IT
         uid: 1400
         password: "{{ default_user_password | password_hash('sha512', 'A512') }}"
@@ -44,31 +50,27 @@
         generate_ssh_key: yes
 
    - name: Set the hostname 
-     command: hostnamectl set-hostname "{{ linux_hostname }}"
-     become: yes
+     hostname:
+        name: "{{ linux_hostname }}" 
 
-   - name: install wget
+   - name: Install wget, zip & unzip 
      become: yes
      dnf:
-        name: wget
+        name: wget, zip, unzip
         state: latest
-
-   - name: Install zip and unzip 
-     become: yes
-     yum:
-       name: zip, unzip
-       state: present 
 
    - name: Create Partition
      parted:
         device: /dev/nvme1n1
         number: 1
         state: present
+
    - name: Create file system
      filesystem:
         dev: /dev/nvme1n1p1
         fstype: xfs
         state: present
+
    - name: Mount /apps01
      mount:
         path: /apps01
@@ -79,11 +81,11 @@
    - name: Create a Directory /apps01/repo
      become: yes
      file:
-       path: "{{ software_repo}}"
+       path: "{{software_repo}}"
        state: directory
        mode: 0755
-       owner: ec2-user
-       group: ec2-user
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
 
    - name: Create tomcat home directory
      become: yes
@@ -91,8 +93,8 @@
        path: "{{ tomcat_home }}"
        state: directory
        mode: 0755
-       owner: wdtvsit
-       group: wdtvsit
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
       
    - name: Create Java home directory
      become: yes
@@ -100,8 +102,12 @@
        path: "{{ java_home }}"
        state: directory
        mode: 0755
-       owner: wdtvsit
-       group: wdtvsit
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+
+   - name: tomcat zip file existance 
+     stat: path="{{tomcat_instl_file }}"
+     register: tomcat_inst_stat
 
    - name: Download Tomcat using get_url
      become: yes
@@ -110,8 +116,13 @@
        dest: "{{ software_repo }}"
        mode: 0755
        checksum: sha512:cbd1b6b9b650b9555ca64c64dc9f06745b3995179c717fd07a93aece1f42c76f337cf5563b625dc9039f6f27721aeb7d396ab2162ff0656f0448a6d2dfb83f2c
-       group: wdtvsit 
-       owner: wdtvsit
+       group: "{{app_user}}"
+       owner: "{{app_user}}"
+     when: tomcat_inst_stat.stat.exists == False
+
+   - name: Java  zip file existance 
+     stat: path="{{ java_instl_file }}"
+     register: java_inst_stat
 
    - name: Download Java
      become: yes
@@ -120,45 +131,65 @@
        dest: "{{ software_repo }}"
        mode: 0755
        checksum: sha256:8770f600fc3b89bf331213c7aa21f8eedd9ca5d96036d1cd48cb2748a3dbefd2
-       group: wdtvsit 
-       owner: wdtvsit
+       group: "{{app_user}}"
+       owner: "{{app_user}}"
+     when: java_inst_stat.stat.exists == False
 
+   - name: folder to rename condition
+     stat: path=/apps01/wdtvs/apache/tomcat/wdtvs/television-production
+     register: tomcat_stat
 
    - name : Copy and Install Tomcat
      become: yes
      tags: tomcatinstall
      unarchive:
-      owner: wdtvsit
-      group: wdtvsit
-      remote_src: yes
-      src: "{{ tomcat_instl_file }}"
-      dest: "{{ tomcat_home }}"
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+       remote_src: yes
+       src: "{{ tomcat_instl_file }}"
+       dest: "{{ tomcat_home }}"
+     when: tomcat_stat.stat.exists == False
 
    - name : Copy and Install Java
      become: yes
      tags: javainstall
      unarchive:
-      owner: wdtvsit
-      group: wdtvsit
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
       remote_src: yes
       src: "{{ java_instl_file }}"
       dest: "{{ java_home }}"
 
-   - name: folder to 
-     stat: path=/apps01/wdtvs/apache/tomcat/wdtvs/apache-tomcat-9.0.52
-     register: tomcat_stat
+
 
    - name: Move apache-tomcat-9.0.52 television-production
      command: mv /apps01/wdtvs/apache/tomcat/wdtvs/apache-tomcat-9.0.52 /apps01/wdtvs/apache/tomcat/wdtvs/television-production
-     when: tomcat_stat.stat.exists
+     when: tomcat_stat.stat.exists == False
+
+   - name : Copy tomcat jar files to the server
+     copy:
+      src: "{{jar_file_src}}"
+      dest: "{{jar_instl_file}}"     
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+
+   - name : Copy the jar files to lib folder
+     become: yes
+     tags: jarinstall
+     unarchive:
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+      remote_src: yes
+      src: "{{jar_instl_file}}"
+      dest: "{{jar_file_target}}"
 
    - name: Create setevn file
      file:
        path: /apps01/wdtvs/apache/tomcat/wdtvs/television-production/bin/setenv.sh
        state: touch
        mode: u+rw,g-w,o-rwx
-       owner: wdtvsit
-       group: wdtvsit
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
 
    - name: Add content to setenv.sh file
      lineinfile:
@@ -179,6 +210,18 @@
        owner: smehraein
        group: smehraein
        mode: '0400'
+
+   - name: restart sshd daemon 
+     systemd:
+       state: restarted
+       daemon_reload: yes
+       name: sshd
+
+   - name: Install the latest updates for all packages
+     become: yes
+     dnf:
+        name: "*"
+        state: latest
 
    - name : Reboot the server
      reboot:

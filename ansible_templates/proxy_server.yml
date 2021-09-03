@@ -1,0 +1,91 @@
+---
+- name: Configure and customize App server
+  hosts: all
+  gather_facts: no
+  vars:
+      - default_user_password: Zereshk1
+      - linux_hostname: "wdtvsux02.wdtvs.com"
+      - defaul_user: "ec2-user"
+  remote_user: ec2-user
+  tasks:
+   - name: Set timezone to PST
+     timezone:
+        name: America/Los_Angeles
+   
+   - name: Ensure group admin exists with correct gid
+     group:
+        name: uxadmin
+        gid: 1200
+        state: present
+
+   - name: Create Shah Mehraein account
+     user:
+        name: smehraein
+        comment: Shah Mehraein
+        uid: 1201
+        groups: uxadmin, wheel
+        password: "{{ default_user_password | password_hash('sha512', 'A512') }}"
+        shell: /bin/bash
+        state: present
+        generate_ssh_key: yes
+
+   - name: Set the hostname 
+     hostname:
+        name: "{{ linux_hostname }}" 
+
+   - name: Install wget, zip & unzip
+     become: yes
+     dnf:
+        name: wget, zip, unzip
+        state: latest
+
+   - name: Copy nginx repo info 
+     copy:
+       src: /home/shahm/non-prod-wdtvs/ansible_templates/config_files/nginx.rep
+       dest: /etc/yum.repos.d/nginx.repo
+       owner: root
+       group: root
+
+   - name: Install nginx
+     become: yes
+     dnf:
+        name: nginx
+        state: latest
+
+   - name: start nginx
+     service:
+        name: nginx
+        state: started
+        enabled: yes
+
+   - name: Copy authorized_keys file for Shah
+     copy:
+       src: /home/shahm/non-prod-wdtvs/ansible_templates/config_files/smehraein/authorized_keys
+       dest: /home/smehraein/.ssh/
+       owner: smehraein
+       group: smehraein
+       mode: '0400'
+
+   - name: Copy sshd_config file to the server
+     copy:
+       src: /home/shahm/non-prod-wdtvs/ansible_templates/config_files/sshd_config
+       dest: /etc/ssh/
+       owner: root
+       group: root
+
+   - name: restart sshd daemon 
+     systemd:
+       state: restarted
+       daemon_reload: yes
+       name: sshd
+
+   - name: Install the latest updates for all packages
+     become: yes
+
+     dnf:
+        name: "*"
+        state: latest
+
+#   - name : Reboot the server
+#     reboot:
+#       reboot_timeout: 60

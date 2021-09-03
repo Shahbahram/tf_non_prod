@@ -77,7 +77,7 @@
    - name: Create a Directory /apps01/repo
      become: yes
      file:
-       path: "{{ software_repo}}"
+       path: "{{software_repo}}"
        state: directory
        mode: 0755
        owner: "{{app_user}}"
@@ -180,4 +180,4 @@
 
    - name : Reboot the server
      reboot:
-       reboot_timeout: 60
+       reboot_timeout: 5
