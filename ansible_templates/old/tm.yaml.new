@@ -1,0 +1,183 @@
+---
+- name: Configure and customize App server
+  hosts: all
+  vars:
+      - tomcat_home: "/apps01/wdtvs/apache/tomcat/wdtvs"
+      - tomcat_instl_file: "/apps01/repo/apache-tomcat-9.0.52.zip"
+      - java_home: "/apps01/wdtvs/jdk"
+      - java_instl_file: "/apps01/repo/OpenJDK11U-jdk_x64_linux_hotspot_11.0.12_7.tar.gz"
+      - software_repo: "/apps01/repo"
+      - default_user_password: Zereshk1
+      - app_user: "svc_wdtvs"
+      - linux_hostname: "wdtvsux01.wdtvs.com"
+      - defaul_user: "ec2-user"
+
+  remote_user: ec2-user
+  tasks:
+   - name: Set timezone to PST
+     command: timedatectl set-timezone America/Los_Angeles
+     become: yes
+     
+   - name: Ensure group admin exists with correct gid
+     group:
+        name: uxadmin
+        gid: 1200
+        state: present
+
+   - name: Create Shah Mehraein account
+     user:
+        name: smehraein
+        comment: Shah Mehraein
+        uid: 1201
+        groups: uxadmin, wheel
+        password: "{{ default_user_password | password_hash('sha512', 'A512') }}"
+        shell: /bin/bash
+        state: present
+        generate_ssh_key: yes
+
+   - name: Create the applicaiton account
+     user:
+        name: "{{ app_user }}"
+        comment:  Walt Disney Television IT
+        uid: 1400
+        password: "{{ default_user_password | password_hash('sha512', 'A512') }}"
+        shell: /bin/bash
+        state: present
+        generate_ssh_key: yes
+
+   - name: Set the hostname 
+     command: hostnamectl set-hostname "{{ linux_hostname }}"
+     become: yes
+
+   - name: Install wget, zip & unzip
+     become: yes
+     dnf:
+        name: wget, zip, unzip
+        state: latest
+
+   - name: Create Partition
+     parted:
+        device: /dev/nvme1n1
+        number: 1
+        state: present
+
+   - name: Create file system
+     filesystem:
+        dev: /dev/nvme1n1p1
+        fstype: xfs
+        state: present
+
+   - name: Mount /apps01
+     mount:
+        path: /apps01
+        src: /dev/nvme1n1p1
+        fstype: xfs
+        state: mounted
+
+   - name: Create a Directory /apps01/repo
+     become: yes
+     file:
+       path: "{{software_repo}}"
+       state: directory
+       mode: 0755
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+
+   - name: Create tomcat home directory
+     become: yes
+     file:
+       path: "{{ tomcat_home }}"
+       state: directory
+       mode: 0755
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+      
+   - name: Create Java home directory
+     become: yes
+     file:
+       path: "{{ java_home }}"
+       state: directory
+       mode: 0755
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+
+   - name: Download Tomcat using get_url
+     become: yes
+     get_url:
+       url:  https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.52/bin/apache-tomcat-9.0.52.zip 
+       dest: "{{ software_repo }}"
+       mode: 0755
+       checksum: sha512:cbd1b6b9b650b9555ca64c64dc9f06745b3995179c717fd07a93aece1f42c76f337cf5563b625dc9039f6f27721aeb7d396ab2162ff0656f0448a6d2dfb83f2c
+       group: "{{app_user}}"
+       owner: "{{app_user}}"
+
+   - name: Download Java
+     become: yes
+     get_url:
+       url:  https://github.com/adoptium/temurin11-binaries/releases/download/jdk-11.0.12%2B7/OpenJDK11U-jdk_x64_linux_hotspot_11.0.12_7.tar.gz
+       dest: "{{ software_repo }}"
+       mode: 0755
+       checksum: sha256:8770f600fc3b89bf331213c7aa21f8eedd9ca5d96036d1cd48cb2748a3dbefd2
+       group: "{{app_user}}"
+       owner: "{{app_user}}"
+
+
+   - name : Copy and Install Tomcat
+     become: yes
+     tags: tomcatinstall
+     unarchive:
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+      remote_src: yes
+      src: "{{ tomcat_instl_file }}"
+      dest: "{{ tomcat_home }}"
+
+   - name : Copy and Install Java
+     become: yes
+     tags: javainstall
+     unarchive:
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+      remote_src: yes
+      src: "{{ java_instl_file }}"
+      dest: "{{ java_home }}"
+
+   - name: folder to 
+     stat: path=/apps01/wdtvs/apache/tomcat/wdtvs/apache-tomcat-9.0.52
+     register: tomcat_stat
+
+   - name: Move apache-tomcat-9.0.52 television-production
+     command: mv /apps01/wdtvs/apache/tomcat/wdtvs/apache-tomcat-9.0.52 /apps01/wdtvs/apache/tomcat/wdtvs/television-production
+     when: tomcat_stat.stat.exists
+
+   - name: Create setevn file
+     file:
+       path: /apps01/wdtvs/apache/tomcat/wdtvs/television-production/bin/setenv.sh
+       state: touch
+       mode: u+rw,g-w,o-rwx
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+
+   - name: Add content to setenv.sh file
+     lineinfile:
+       path: /apps01/wdtvs/apache/tomcat/wdtvs/television-production/bin/setenv.sh
+       line: "export JRE_HOME=/apps01/wdtvs/jdk/jdk-11.0.12+7"
+   - name: Copy sshd_config file to the server
+     copy:
+       src: /home/shahm/non-prod-wdtvs/ansible_templates/config_files/sshd_config
+       dest: /etc/ssh/
+       owner: root
+       group: root
+       mode: '0600'
+
+   - name: Copy authorized_keys file for Shah
+     copy:
+       src: /home/shahm/non-prod-wdtvs/ansible_templates/config_files/smehraein/authorized_keys
+       dest: /home/smehraein/.ssh/
+       owner: smehraein
+       group: smehraein
+       mode: '0400'
+
+   - name : Reboot the server
+     reboot:
+       reboot_timeout: 5

@@ -1,0 +1,46 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 1.0 Transitional//EN" "http://www.w3.org/TR/html1/DTD/html1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/html">
+	<link rel="stylesheet" type="text/css" href="css/mdocz.css" />
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<title>Home Page</title>
+
+	<body>
+		<div class="iconpage">
+			<h3>Desktop</h3>
+			<div class="icons">
+				<div>
+					<a href="https://tv.foxinc.com:8080/television-production-web/">
+						<div class="iconbox">
+							<img src="image/doczilla2.jpg" />
+						</div>
+					</a>
+					<a href="https://idea.foxinc.com:8181/television-web/">
+						<div class="iconbox">
+							<img src="image/idea.jpg" width="178" />
+						</div>
+					</a>
+					<a href="https://tcft.foxinc.com:11800/f?p=103">
+						<div class="iconbox">
+							<img src="image/akamai.jpg" />
+						</div>
+					</a>
+				</div>
+			</div>
+			<h3>Mobile</h3>
+			<div class="icons">
+				<div>
+					<a href="https://tv.foxinc.com:8080/television-production-mobile-web/">
+						<div class="iconbox">
+							<img src="image/doczilla-mobile.jpg" width="178" />
+						</div>
+					</a>
+					<a href="https://tv.foxinc.com:8080/television-mobile-web/">
+						<div class="iconbox">
+							<img src="image/idea-mobile.jpg" width="178" />
+						</div>
+					</a>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>

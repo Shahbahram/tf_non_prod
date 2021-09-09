@@ -1,0 +1,121 @@
+---
+- name: Download Tomcat8 from ec2-user.apache.org
+  hosts: all
+  vars:
+      - tomcat_home: "/apps01/wdtvs/apache/tomcat/wdtvs"
+      - tomcat_instl_file: "/apps01/repo/apache-tomcat-9.0.52.zip"
+      - software_repo: "/apps01/repo"
+  remote_user: ec2-user
+  tasks:
+   - name: Set timezone to PST
+     command: timedatectl set-timezone America/Los_Angeles
+     become: yes
+     
+   - name: Ensure group "admin" exists with correct gid
+     group:
+        name: uxadmin
+        gid: 1200
+        state: present
+
+   - name: Add Shah Mehraein account 
+     user:
+        name: smehraein
+        comment: Shah Mehraein
+        uid: 1200
+        group: uxadmin
+
+   - name: Add wxtvs user
+     user:
+        name: wdtvsit
+        comment:  Walt Disney Television IT
+        uid: 1400
+
+   - name: Set the hostname 
+     command: hostnamectl set-hostname tvatwdux01.wdtvs.com
+     become: yes
+
+   - name: install wget
+     become: yes
+     dnf:
+        name: wget
+        state: latest
+
+   - name: Install zip and unzip 
+     become: yes
+     yum:
+       name: zip, unzip
+       state: present 
+
+   - name: Create Partition
+     parted:
+        device: /dev/nvme1n1
+        number: 1
+        state: present
+   - name: Create file system
+     filesystem:
+        dev: /dev/nvme1n1p1
+        fstype: xfs
+        state: present
+   - name: Mount /apps01
+     mount:
+        path: /apps01
+        src: /dev/nvme1n1p1
+        fstype: xfs
+        state: mounted
+
+   - name: Create a Directory /apps01/repo
+     become: yes
+     file:
+       path: "{{ software_repo}}"
+       state: directory
+       mode: 0755
+       owner: ec2-user
+       group: ec2-user
+
+   - name: Create tomcat home directory
+     become: yes
+     file:
+       path: "{{ tomcat_home }}"
+       state: directory
+       mode: 0755
+       owner: wdtvsit
+       group: wdtvsit
+      
+   - name: Download Tomcat using get_url
+     become: yes
+     get_url:
+       url:  https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.52/bin/apache-tomcat-9.0.52.zip 
+       dest: "{{ software_repo }}"
+       mode: 0755
+       checksum: sha512:cbd1b6b9b650b9555ca64c64dc9f06745b3995179c717fd07a93aece1f42c76f337cf5563b625dc9039f6f27721aeb7d396ab2162ff0656f0448a6d2dfb83f2c
+       group: wdtvsit 
+       owner: wdtvsit
+
+   - name : Copy and Install Tomcat
+     become: yes
+     tags: tomcatinstall
+     unarchive:
+      owner: wdtvsit
+      group: wdtvsit
+      remote_src: yes
+      src: "{{ tomcat_instl_file }}"
+      dest: "{{ tomcat_home }}"
+
+   - name: folder to 
+     stat: path=/apps01/wdtvs/apache/tomcat/wdtvs/apache-tomcat-9.0.52
+     register: tomcat_stat
+
+   - name: Move apache-tomcat-9.0.52 television-production
+     command: mv /apps01/wdtvs/apache/tomcat/wdtvs/apache-tomcat-9.0.52 /apps01/wdtvs/apache/tomcat/wdtvs/television-production
+     when: tomcat_stat.stat.exists
+
+   - name: Create setevn file
+     file:
+       path: /apps01/wdtvs/apache/tomcat/wdtvs/television-production/bin/setenv.sh
+       state: touch
+       mode: u+rw,g-w,o-rwx
+
+   - name: Add content to setenv.sh file
+     lineinfile:
+       path: /apps01/wdtvs/apache/tomcat/wdtvs/television-production/bin/setenv.sh
+       line: "export JRE_HOME=/apps01/wdtvs/jdk/jdk-11.0.12+7"

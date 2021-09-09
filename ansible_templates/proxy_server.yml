@@ -1,7 +1,7 @@
 ---
 - name: Configure and customize App server
   hosts: all
-  gather_facts: no
+  gather_facts: yes
   vars:
       - default_user_password: Zereshk1
       - linux_hostname: "wdtvsux02.wdtvs.com"
@@ -35,20 +35,20 @@
 
    - name: Install wget, zip & unzip
      become: yes
-     dnf:
+     yum:
         name: wget, zip, unzip
         state: latest
 
    - name: Copy nginx repo info 
      copy:
-       src: /home/shahm/non-prod-wdtvs/ansible_templates/config_files/nginx.rep
+       src: /home/shahm/non-prod-wdtvs/ansible_templates/config_files/amzn2_nginx.repo
        dest: /etc/yum.repos.d/nginx.repo
        owner: root
        group: root
 
    - name: Install nginx
      become: yes
-     dnf:
+     yum:
         name: nginx
         state: latest
 
@@ -82,7 +82,7 @@
    - name: Install the latest updates for all packages
      become: yes
 
-     dnf:
+     yum:
         name: "*"
         state: latest
 

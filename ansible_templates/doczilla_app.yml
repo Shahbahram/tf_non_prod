@@ -1,0 +1,323 @@
+---
+- name: Configure and customize App server
+  hosts: all
+  gather_facts: yes
+  vars:
+      - tomcat_home: "/apps01/wdtvs/apache/tomcat/wdtvs"
+      - tomcat_instl_file: "/apps01/repo/apache-tomcat-9.0.52.zip"
+      - java_home: "/apps01/wdtvs/jdk"
+      - java_instl_file: "/apps01/repo/OpenJDK11U-jdk_x64_linux_hotspot_11.0.12_7.tar.gz"
+      - jar_file_src: "~/non-prod-wdtvs/ansible_templates/config_files/jar_files/jars.zip"
+      - jar_file_target: "/apps01/wdtvs/apache/tomcat/wdtvs/television-production/lib/"
+      - jar_instl_file: "/apps01/repo/jar.zip"
+      - war_file_src: "~/non-prod-wdtvs/ansible_templates/config_files/war_files/television-production-web.war"
+      - war_file_target: "/apps01/wdtvs/apache/tomcat/wdtvs/television-production/webapps/"
+      - war_instl_file: "/apps01/repo/war.zip"
+      - server_file_src: "~/non-prod-wdtvs/ansible_templates/config_files/conf/dev/server--Doczilla-DEV.xml"
+      - server_file_target: "/apps01/wdtvs/apache/tomcat/wdtvs/television-production/conf/server.xml"
+      - context_file_src: "~/non-prod-wdtvs/ansible_templates/config_files/conf/dev/context--Doczilla-DEV.xml"
+      - context_file_target: "/apps01/wdtvs/apache/tomcat/wdtvs/television-production/conf/context.xml"
+      - keystore_file_src: "~/non-prod-wdtvs/ansible_templates/config_files/conf/dev/keystore.jks"
+      - keystore_file_target: "/apps01/wdtvs/apache/tomcat/wdtvs/television-production/conf/keystore.jks"
+      - software_repo: "/apps01/repo"
+      - default_user_password: "$1$zA668I18$4IJYb9dwMz9KBIIcPAHz9."
+      - app_user: "svc_wdtvs"
+      - linux_hostname: "wdtvsux01.wdtvs.com"
+      - defaul_user: "ec2-user"
+
+  remote_user: ec2-user
+  tasks:
+   - name: Set timezone to PST
+     timezone:
+        name: America/Los_Angeles
+   
+   - name: Ensure group admin exists with correct gid
+     group:
+        name: uxadmin
+        gid: 1200
+        state: present
+
+   - name: Create Shah Mehraein account
+     user:
+        name: smehraein
+        comment: Shah Mehraein
+        uid: 1201
+        groups: uxadmin, wheel
+        password: "{{ default_user_password }}"
+        shell: /bin/bash
+        state: present
+        generate_ssh_key: yes
+
+   - name: Create Jeff Federick account
+     user:
+        name: jefff
+        comment: Jeff Federick
+        uid: 1202
+        groups: uxadmin, wheel
+        password: "{{ default_user_password }}"
+        shell: /bin/bash
+        state: present
+        generate_ssh_key: yes
+
+   - name: Create the applicaiton account
+     user:
+        name: "{{ app_user }}"
+        comment:  Walt Disney Television IT
+        uid: 1400
+        password: "{{ default_user_password }}"
+        shell: /bin/bash
+        state: present
+        generate_ssh_key: yes
+
+   - name: Create Nasser Mohamed
+     user: 
+        name: nasserm
+        comment: Nasser Mohamed`
+        uid: 1203
+        groups: svc_wdtvs
+        password: "{{ default_user_password }}"
+        shell: /bin/bash
+        state: present
+        generate_ssh_key: yes
+
+   - name: Set the hostname 
+     hostname:
+        name: "{{ linux_hostname }}" 
+
+   - name: Install wget, zip & unzip 
+     become: yes
+     yum:
+        name: wget, zip, unzip
+        state: latest
+        use_backend: yum
+   - name: Create Partition
+     parted:
+        device: /dev/xvdb
+        number: 1
+        state: present
+
+   - name: Create file system
+     filesystem:
+        dev: /dev/xvdb1
+        fstype: xfs
+        state: present
+
+   - name: Mount /apps01
+     mount:
+        path: /apps01
+        src: /dev/xvdb1
+        fstype: xfs
+        state: mounted
+
+   - name: Create a Directory /apps01/repo
+     become: yes
+     file:
+       path: "{{software_repo}}"
+       state: directory
+       mode: 0755
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+
+   - name: Create tomcat home directory
+     become: yes
+     file:
+       path: "{{ tomcat_home }}"
+       state: directory
+       mode: 0755
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+      
+   - name: Create Java home directory
+     become: yes
+     file:
+       path: "{{ java_home }}"
+       state: directory
+       mode: 0755
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+
+   - name: tomcat zip file existance 
+     stat: path="{{tomcat_instl_file }}"
+     register: tomcat_inst_stat
+
+   - name: Download Tomcat using get_url
+     become: yes
+     get_url:
+       url:  https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.52/bin/apache-tomcat-9.0.52.zip 
+       dest: "{{ software_repo }}"
+       mode: 0755
+       checksum: sha512:cbd1b6b9b650b9555ca64c64dc9f06745b3995179c717fd07a93aece1f42c76f337cf5563b625dc9039f6f27721aeb7d396ab2162ff0656f0448a6d2dfb83f2c
+       group: "{{app_user}}"
+       owner: "{{app_user}}"
+     when: tomcat_inst_stat.stat.exists == False
+
+   - name: Java  zip file existance 
+     stat: path="{{ java_instl_file }}"
+     register: java_inst_stat
+
+   - name: Download Java
+     become: yes
+     get_url:
+       url:  https://github.com/adoptium/temurin11-binaries/releases/download/jdk-11.0.12%2B7/OpenJDK11U-jdk_x64_linux_hotspot_11.0.12_7.tar.gz
+       dest: "{{ software_repo }}"
+       mode: 0755
+       checksum: sha256:8770f600fc3b89bf331213c7aa21f8eedd9ca5d96036d1cd48cb2748a3dbefd2
+       group: "{{app_user}}"
+       owner: "{{app_user}}"
+     when: java_inst_stat.stat.exists == False
+
+   - name: folder to rename condition
+     stat: path=/apps01/wdtvs/apache/tomcat/wdtvs/television-production
+     register: tomcat_stat
+
+   - name : Copy and Install Tomcat
+     become: yes
+     tags: tomcatinstall
+     unarchive:
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+       remote_src: yes
+       src: "{{ tomcat_instl_file }}"
+       dest: "{{ tomcat_home }}"
+     when: tomcat_stat.stat.exists == False
+
+   - name : Copy and Install Java
+     become: yes
+     tags: javainstall
+     unarchive:
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+      remote_src: yes
+      src: "{{ java_instl_file }}"
+      dest: "{{ java_home }}"
+
+   - name: Move apache-tomcat-9.0.52 television-production
+     command: mv /apps01/wdtvs/apache/tomcat/wdtvs/apache-tomcat-9.0.52 /apps01/wdtvs/apache/tomcat/wdtvs/television-production
+     when: tomcat_stat.stat.exists == False
+
+   - name : Copy tomcat jar files to the server
+     copy:
+      src: "{{jar_file_src}}"
+      dest: "{{jar_instl_file}}"     
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+
+   - name : Copy the jar files to lib folder
+     become: yes
+     tags: jarinstall
+     unarchive:
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+      remote_src: yes
+      src: "{{jar_instl_file}}"
+      dest: "{{jar_file_target}}"
+
+   - name: Create setevn file
+     file:
+       path: /apps01/wdtvs/apache/tomcat/wdtvs/television-production/bin/setenv.sh
+       state: touch
+       mode: u+rw,g-w,o-rwx
+       owner: "{{app_user}}"
+       group: "{{app_user}}"
+
+   - name: Add content to setenv.sh file
+     lineinfile:
+       path: /apps01/wdtvs/apache/tomcat/wdtvs/television-production/bin/setenv.sh
+       line: "export JRE_HOME=/apps01/wdtvs/jdk/jdk-11.0.12+7"
+
+   - name: Copy sshd_config file to the server
+     copy:
+       src: ~/non-prod-wdtvs/ansible_templates/config_files/sshd_config
+       dest: /etc/ssh/
+       owner: root
+       group: root
+       mode: '0600'
+
+   - name: Check if context.bak exists
+     stat: path=/apps01/wdtvs/apache/tomcat/wdtvs/television-production/conf/context.bak
+     register: context_bak_stat
+
+   - name: Keep copy of context.xml file
+     command: mv /apps01/wdtvs/apache/tomcat//wdtvs/television-production/conf/context.xml  /apps01/wdtvs/apache/tomcat/wdtvs/television-production/conf/context.bak
+     when: context_bak_stat.stat.exists == False
+
+   - name: Check if context.bak exists
+     stat: path=/apps01/wdtvs/apache/tomcat/wdtvs/television-production/conf/server.bak
+     register: server_bak_stat
+
+   - name: Keep copy of server.xml file
+     command: mv /apps01/wdtvs/apache/tomcat/wdtvs/television-production/conf/server.xml  /apps01/wdtvs/apache/tomcat/wdtvs/television-production/conf/server.bak
+     when: server_bak_stat.stat.exists == False
+
+   - name: Check if context.xml file  exists
+     stat: path="{{context_file_target}}"
+     register: context_stat
+
+   - name: Check if context.xml file  exists
+     stat: path="{{server_file_target}}"
+     register: server_stat
+
+   - name : Copy server.xml file to the server
+     copy:
+      src: "{{server_file_src}}"
+      dest: "{{server_file_target}}"     
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+      backup: yes
+      force: no
+
+   - name : Copy context.xml file to the server
+     copy:
+      src: "{{context_file_src}}"
+      dest: "{{context_file_target}}"     
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+      backup: yes
+      force: no
+
+   - name : Copy keystore.jks file to the server
+     copy:
+      src: "{{keystore_file_src}}"
+      dest: "{{keystore_file_target}}"     
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+      force: no
+
+   - name : Copy  warfile to the server
+     copy:
+      src: "{{war_file_src}}"
+      dest: "{{war_file_target}}"     
+      owner: "{{app_user}}"
+      group: "{{app_user}}"
+      backup: yes
+      force: no
+
+   - name: Copy authorized_keys file for Shah
+     copy:
+       src: ~/non-prod-wdtvs/ansible_templates/config_files/smehraein/authorized_keys
+       dest: /home/smehraein/.ssh/
+       owner: smehraein
+       group: smehraein
+       mode: '0400'
+       force: no
+
+   - name: restart sshd daemon 
+     systemd:
+       state: restarted
+       daemon_reload: yes
+       name: sshd
+       force: no
+
+   - name: Install the latest updates for all packages
+     become: yes
+     yum:
+        name: "*"
+        state: latest
+        use_backend: yum
+
+   - name: Update the permision for .sh file 
+     file:
+       path: "/apps01/wdtvs/apache/tomcat/wdtvs/television-production/bin"
+       state: directory
+       mode: '0754'
+       recurse: yes

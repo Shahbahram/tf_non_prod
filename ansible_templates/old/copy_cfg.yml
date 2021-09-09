@@ -1,0 +1,12 @@
+---
+- name: Customize and configure App server
+  hosts: all
+  remote_user: ec2-user
+  tasks:
+    - name: Copy sshd_config file to the server
+      copy:
+        src: /home/shahm/non-prod-wdtvs/ansible_templates/config_files/sshd_config
+        dest: /etc/ssh/
+        owner: root
+        group: root
+        mode: '0600'

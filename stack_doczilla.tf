@@ -9,65 +9,76 @@ resource "aws_key_pair" "linux-np" {
 }
 
 #Create and bootstrap doczilla tomcat application  server 
-resource "aws_instance" "tomcat_app_server" {
+resource "aws_instance" "doczilla_app" {
   provider                    = aws.region-primary
-  ami                         = "ami-0bcadaece3162039d"
-  instance_type               = var.instance-type
+  ami                         = "ami-0c2d06d50ce30b442"
+#  ami                         = "ami-0bcadaece3162039d"  Redhat 8.3 ami 
+  instance_type               = "t3.large"
   key_name                    = aws_key_pair.linux-np.key_name
   associate_public_ip_address = false
   vpc_security_group_ids      = [aws_security_group.SSH_Access_From_VPC_Clients.id]
   subnet_id                   = aws_subnet.DWUW2NPPVSN-Private-Zone.id
 
-  tags = {
-    Name = "tomcat_app_server"
+# root disk
+root_block_device {
+    volume_size           = "80"
+    volume_type           = "gp2"
+    encrypted             = true
+    delete_on_termination = true
   }
-  depends_on = [aws_ebs_volume.apps_vol01]
-}
 
-resource "aws_volume_attachment" "tomact-app01-vol01" {
-  device_name = "/dev/sdb"
-  volume_id   = aws_ebs_volume.apps_vol01.id
-  instance_id = aws_instance.tomcat_app_server.id
-
+# data disk
+ebs_block_device {
+    device_name           = "/dev/xvdb"
+    volume_size           = "200"
+    volume_type           = "gp2"
+    encrypted             = true
+    delete_on_termination = true
+  }
+tags = {
+    Name = "doczilla_app"
+  }
 provisioner "remote-exec" {
     inline = ["echo 'Wait until ssh is ready'"]
     connection {
       type = "ssh"
       user = var.ssh_user
       private_key = file(pathexpand(var.private_key_path))
-      host = aws_instance.tomcat_app_server.private_ip
+      host = aws_instance.doczilla_app.private_ip
     }
 }
 
-  provisioner "local-exec" {
+provisioner "local-exec" {
     command = <<EOF
-aws --profile ${var.profile} ec2 wait instance-status-ok --region ${var.region-primary} --instance-ids ${aws_instance.tomcat_app_server.id} \
-&& ansible-playbook -i ${aws_instance.tomcat_app_server.private_ip}, ansible_templates/tomcat_doczilla.yml
+aws --profile ${var.profile} ec2 wait instance-status-ok --region ${var.region-primary} --instance-ids ${aws_instance.doczilla_app.id} \
+&& ansible-playbook -i ${aws_instance.doczilla_app.private_ip}, ansible_templates/doczilla_app.yml
 EOF
   }
 }
-
-resource "aws_ebs_volume" "apps_vol01" {
-  availability_zone = "us-west-2a"
-  encrypted         = true
-  size              = 100
-}
-
 ############################################################
 
 #Create and bootstrap doczilla nginx proxy server
 
-resource "aws_instance" "proxy_server_1" {
+resource "aws_instance" "doczilla_proxy" {
   provider                    = aws.region-primary
-  ami                         = "ami-0bcadaece3162039d"
-  instance_type               = var.instance-type
+  ami                         = "ami-0c2d06d50ce30b442"
+#  ami                         = "ami-0bcadaece3162039d"
+  instance_type               = "t3.medium"
   key_name                    = aws_key_pair.linux-np.key_name
   associate_public_ip_address = true
   vpc_security_group_ids      = [aws_security_group.SSH_Access_From_VPC_Clients.id]
   subnet_id                   = aws_subnet.DWUW2NPPBSN-Public-Zone.id
 
+# root disk
+root_block_device {
+    volume_size           = "80"
+    volume_type           = "gp2"
+    encrypted             = true
+    delete_on_termination = true
+  }
+
   tags = {
-    Name = "proxy_server_1"
+    Name = "doczilla_proxy"
   }
   depends_on = [aws_route_table.DWUW2NPPBRT-NP-Public-RT]
 
@@ -77,19 +88,19 @@ provisioner "remote-exec" {
       type = "ssh"
       user = var.ssh_user
       private_key = file(pathexpand(var.private_key_path))
-      host = aws_instance.proxy_server_1.private_ip
+      host = aws_instance.doczilla_proxy.private_ip
     }
 }
 
 provisioner "local-exec" {
     command = <<EOF
-aws --profile ${var.profile} ec2 wait instance-status-ok --region ${var.region-primary} --instance-ids ${aws_instance.proxy_server_1.id} \
-&& ansible-playbook -i ${aws_instance.proxy_server_1.private_ip}, ansible_templates/proxy_server.yml
+aws --profile ${var.profile} ec2 wait instance-status-ok --region ${var.region-primary} --instance-ids ${aws_instance.doczilla_proxy.id} \
+&& ansible-playbook -i ${aws_instance.doczilla_proxy.private_ip}, ansible_templates/doczilla_proxy.yml
 EOF
   }
 }
 
-resource "aws_eip" "proxy_server_1_eip" {
-  instance = aws_instance.proxy_server_1.id
+resource "aws_eip" "doczilla_proxy_eip" {
+  instance = aws_instance.doczilla_proxy.id
   vpc = true
 }
